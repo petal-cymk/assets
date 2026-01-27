@@ -23,15 +23,26 @@ local function import(name, folder, link)
     end
 
     warn("importing " .. name .. " into " .. path .. " for first time import")
-    writefile(full, game:HttpGet(link))
+    local ok, err = pcall(function()
+        writefile(full, game:HttpGet(link))
+    end)
+    if not ok then
+        warn("could not import due to executor error: " .. err)
+        return nil
+    end
+
     return full
 end
 
 local function gca(name, folder)
     local full = root .. "/assets/" .. folder .. "/" .. name
     if isfile(full) then
-        return getcustomasset(full)
+        local ok, asset = pcall(getcustomasset, full)
+        if ok then
+            return asset
+        end
     end
+    return "rbxassetid://6050149849"
 end
 
 return {

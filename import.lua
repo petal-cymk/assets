@@ -15,6 +15,7 @@ for _, path in ipairs(structure) do
 end
 
 local function import(name, folder, link)
+    pcall(function()
     local path = root .. "/assets/" .. folder
     local full = path .. "/" .. name
 
@@ -33,9 +34,11 @@ local function import(name, folder, link)
     end
 
     return full
+    end)
 end
 
 local function gca(name, folder)
+    pcall(function()
     local full = root .. "/assets/" .. folder .. "/" .. name
     if isfile(full) then
         local ok, asset = pcall(getcustomasset, full)
@@ -44,6 +47,7 @@ local function gca(name, folder)
         end
     end
     return "rbxassetid://6050149849"
+    end)
 end
 
 return {

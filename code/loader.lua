@@ -11,7 +11,6 @@
                                                                                  |  $$$$$$/|  $$$$$$/
                                                                                   \______/  \______/ ]]
 local universal = workspace:FindFirstChild("AiZones") ~= nil
-
 if universal then
     loadstring(game:HttpGet("https://api.luarmor.net/files/v4/loaders/9fd6d63b32f30668544062ba8e0caf9e.lua"))()
 else

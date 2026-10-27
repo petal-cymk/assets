@@ -61,9 +61,7 @@ def setup_console():
 def log(level, msg):
     color, label = TAGS[level]
     stamp = datetime.now().strftime("%H:%M:%S")
-    prefix = f"{C.DIM}{stamp}{C.RESET} {color}[{label}]{C.RESET} "
-    indent = " " * (len(stamp) + len(label) + 4)
-    print(prefix + str(msg).replace("\n", "\n" + indent))
+    print(f"{C.DIM}{stamp}{C.RESET} {color}[{label}]{C.RESET} {msg}")
 
 
 def banner():
@@ -433,32 +431,41 @@ def verify_signature(path):
     return data.get("Status") == "Valid" and "roblox" in data.get("Subject", "").lower()
 
 
-def wait_for_network(host="setup.rbxcdn.com", timeout=60):
+def wait_for_network(host="setup.rbxcdn.com", port=443, timeout=90):
     log("info", "waiting for network")
     end = time.time() + timeout
     while time.time() < end:
         try:
-            socket.gethostbyname(host)
-            return True
+            with socket.create_connection((host, port), timeout=5):
+                return True
         except OSError:
             time.sleep(2)
     return False
 
 
+def download_installer(dest, attempts=4):
+    for n in range(1, attempts + 1):
+        try:
+            req = urllib.request.Request(INSTALLER_URL, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp, open(dest, "wb") as f:
+                shutil.copyfileobj(resp, f)
+            return True
+        except Exception as e:
+            log("warn", f"download attempt {n}/{attempts} failed: {e}")
+            time.sleep(4)
+    return False
+
+
 def install_roblox():
     if not wait_for_network():
-        log("fail", "network never came back, check your connection and run again")
+        log("fail", "could not reach roblox servers, check your connection and run again")
         return
 
     log("info", "downloading roblox installer")
     dest = os.path.join(tempfile.gettempdir(), "RobloxPlayerInstaller.exe")
 
-    try:
-        req = urllib.request.Request(INSTALLER_URL, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=30) as resp, open(dest, "wb") as f:
-            shutil.copyfileobj(resp, f)
-    except Exception as e:
-        log("fail", f"download failed: {e}")
+    if not download_installer(dest):
+        log("fail", "download failed after retries")
         return
 
     log("info", "verifying installer signature")
@@ -491,7 +498,7 @@ def install_roblox():
 
 
 def choose_mode():
-    print(f"  {C.PINK}1{C.RESET}  fix banasync device block  {C.DIM}+ roblox reset, optional reinstall{C.RESET}")
+    print(f"  {C.PINK}1{C.RESET}  spoof mac  {C.DIM}+ roblox reset, optional reinstall{C.RESET}")
     print(f"  {C.PINK}2{C.RESET}  restore original mac")
     print(f"  {C.PINK}q{C.RESET}  quit")
     print()
@@ -523,7 +530,7 @@ def main():
         run_restore()
 
     print()
-    log("ok", "have fun ^w^\n     -fusi")
+    log("ok", "all done")
     pause()
 
 
@@ -532,4 +539,4 @@ if __name__ == "__main__":
         main()
     except Exception:
         traceback.print_exc()
-        input("\ncrashed, ^^ dm me with the traceback above. press enter to close...")
+        input("\ncrashed. press enter to close...")

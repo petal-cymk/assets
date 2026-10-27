@@ -4,7 +4,6 @@ import os
 import re
 import sys
 import stat
-import glob
 import json
 import shutil
 import subprocess
@@ -453,13 +452,16 @@ def reset_roblox():
         except Exception as e:
             log("fail", f"could not remove {target}: {e}")
 
-    if temp:
-        for leftover in glob.glob(os.path.join(temp, "RobloxPlayerInstaller*.exe")):
-            try:
-                os.remove(leftover)
-                log("ok", f"removed {leftover}")
-            except OSError:
-                pass
+    if temp and os.path.isdir(temp):
+        for entry in os.listdir(temp):
+            lowered = entry.lower()
+            if lowered.startswith("robloxplayerinstaller") and lowered.endswith(".exe"):
+                leftover = os.path.join(temp, entry)
+                try:
+                    os.remove(leftover)
+                    log("ok", f"removed {leftover}")
+                except OSError:
+                    pass
 
     try:
         with winreg.OpenKey(

@@ -261,9 +261,19 @@ def get_wlan_profile(adapter_name):
             if ":" in line:
                 key, _, value = line.partition(":")
                 fields.setdefault(key.strip(), value.strip())
-        if fields.get("Name") == adapter_name:
-            return fields.get("Profile") or None
-    return None
+        if fields.get("Name") == adapter_name and fields.get("Profile"):
+            return fields["Profile"]
+
+    safe = adapter_name.replace("'", "''")
+    ps = (
+        f"(Get-NetConnectionProfile -InterfaceAlias '{safe}' "
+        "-ErrorAction SilentlyContinue).Name"
+    )
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps],
+        capture_output=True, text=True
+    ).stdout.strip()
+    return out.splitlines()[0].strip() if out else None
 
 
 def reconnect_wifi(adapter_name, profile):
@@ -310,6 +320,8 @@ def apply_mac(adapter, mac=None):
             profile = get_wlan_profile(adapter_name)
         except Exception:
             profile = None
+        if not profile:
+            log("warn", "could not read current wifi network, reconnect manually if it drops")
 
     try:
         with winreg.OpenKey(
@@ -332,12 +344,12 @@ def apply_mac(adapter, mac=None):
         log("info", "restarting adapter")
         subprocess.run(
             ["netsh", "interface", "set", "interface", adapter_name, "disable"],
-            check=True,
+            check=True, capture_output=True,
         )
         time.sleep(1)
         subprocess.run(
             ["netsh", "interface", "set", "interface", adapter_name, "enable"],
-            check=True,
+            check=True, capture_output=True,
         )
 
         if profile:

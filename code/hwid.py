@@ -3,6 +3,8 @@
 import os
 import re
 import sys
+import stat
+import glob
 import json
 import shutil
 import subprocess
@@ -77,8 +79,11 @@ def banner():
     print()
 
 
-def prompt(question):
-    answer = input(f"{C.PURPLE}?{C.RESET} {question} {C.DIM}(y/n){C.RESET} ").strip().lower()
+def prompt(question, default=False):
+    hint = "Y/n" if default else "y/N"
+    answer = input(f"{C.PURPLE}?{C.RESET} {question} {C.DIM}({hint}){C.RESET} ").strip().lower()
+    if answer == "":
+        return default
     return answer == "y"
 
 
@@ -101,18 +106,6 @@ def relaunch_as_admin():
     )
     if ret <= 32:
         log("fail", f"elevation failed or was cancelled (code {ret})")
-
-
-def find_roblox_dir():
-    candidates = [
-        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Roblox"),
-        r"C:\Program Files (x86)\Roblox",
-        r"C:\Program Files\Roblox",
-    ]
-    for c in candidates:
-        if c and os.path.isdir(os.path.join(c, "Versions")):
-            return c
-    return None
 
 
 def list_adapters():
@@ -390,30 +383,83 @@ def run_restore():
     log("ok", f"restore complete: {done}/{len(adapters)} adapters (verify with getmac or ipconfig /all)")
 
 
+ROBLOX_PROCESSES = [
+    "RobloxPlayerBeta.exe",
+    "RobloxPlayerLauncher.exe",
+    "RobloxCrashHandler.exe",
+    "RobloxPlayerInstaller.exe",
+]
+
+
+def _rm_handler(func, path, exc):
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except OSError:
+        pass
+
+
+def wipe_dir(path):
+    name = os.path.basename(os.path.normpath(path)).lower()
+    if name != "roblox":
+        log("fail", f"refusing to delete unexpected path: {path}")
+        return False
+
+    for attempt in range(3):
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(path, onexc=_rm_handler)
+        else:
+            shutil.rmtree(path, onerror=_rm_handler)
+        if not os.path.exists(path):
+            return True
+        time.sleep(1)
+    return False
+
+
 def reset_roblox():
     log("info", "starting roblox reset")
 
-    log("info", "stopping roblox player")
-    try:
-        subprocess.run(
-            ["taskkill", "/IM", "RobloxPlayerBeta.exe", "/F"],
-            timeout=5,
-            capture_output=True,
-        )
-    except Exception as e:
-        log("warn", f"taskkill error: {e}")
+    log("info", "stopping roblox processes")
+    for proc in ROBLOX_PROCESSES:
+        try:
+            subprocess.run(
+                ["taskkill", "/IM", proc, "/F"], timeout=5, capture_output=True
+            )
+        except Exception as e:
+            log("warn", f"taskkill error for {proc}: {e}")
+    time.sleep(1)
 
-    roblox_dir = find_roblox_dir()
-    if roblox_dir:
-        ebl_path = os.path.join(roblox_dir, "Versions", "rbx9", "Ebl0.dll")
-        if os.path.exists(ebl_path):
+    temp = os.environ.get("TEMP", "")
+    candidates = [
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Roblox"),
+        r"C:\Program Files (x86)\Roblox",
+        r"C:\Program Files\Roblox",
+        os.path.join(temp, "Roblox"),
+    ]
+    targets = []
+    for c in candidates:
+        if c and os.path.isdir(c) and c not in targets:
+            targets.append(c)
+
+    if not targets:
+        log("info", "no roblox files found, nothing to wipe")
+
+    for target in targets:
+        try:
+            if wipe_dir(target):
+                log("ok", f"removed {target}")
+            else:
+                log("warn", f"some files in {target} could not be removed")
+        except Exception as e:
+            log("fail", f"could not remove {target}: {e}")
+
+    if temp:
+        for leftover in glob.glob(os.path.join(temp, "RobloxPlayerInstaller*.exe")):
             try:
-                os.remove(ebl_path)
-                log("ok", "removed Ebl0.dll")
-            except Exception as e:
-                log("fail", f"could not delete Ebl0.dll: {e}")
-    else:
-        log("warn", "no roblox install found, skipping file cleanup")
+                os.remove(leftover)
+                log("ok", f"removed {leftover}")
+            except OSError:
+                pass
 
     try:
         with winreg.OpenKey(
@@ -510,7 +556,7 @@ def install_roblox():
 
 
 def choose_mode():
-    print(f"  {C.PINK}1{C.RESET}  spoof mac  {C.DIM}+ roblox reset, optional reinstall{C.RESET}")
+    print(f"  {C.PINK}1{C.RESET}  spoof mac  {C.DIM}+ wipe roblox + reinstall{C.RESET}")
     print(f"  {C.PINK}2{C.RESET}  restore original mac")
     print(f"  {C.PINK}q{C.RESET}  quit")
     print()
@@ -536,7 +582,7 @@ def main():
     if mode == "spoof":
         run_spoof()
         reset_roblox()
-        if prompt("download and run the official roblox installer now?"):
+        if prompt("reinstall roblox from roblox.com now?", default=True):
             install_roblox()
     else:
         run_restore()

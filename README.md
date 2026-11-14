@@ -14,6 +14,8 @@ most image assets are credited to **ws** (backtrack/specter.vip developer). audi
 
 credit belongs to the original creators wherever known. if you spot a missing or incorrect attribution, feel free to open an issue.
 
-## notes
+## notes & policy
 
 this repository is primarily an asset archive and reference. assets and source code may have their own respective authors, licenses, and usage restrictions, so check the original terms before reusing them.
+
+thanks gpt ^^
